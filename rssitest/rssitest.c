@@ -24,7 +24,7 @@ uint8_t print_buffer[200];
 uint8_t tx_buffer_cnt = 0;
 
 #define TOTAL_SAMPLES (50)
-#define DEVICE_ADDRESS 1
+#define DEVICE_ADDRESS 0
 //TI supplied offsets at Ta = 25 deg C, Vcc = 3V with EM430F6137RF90
 //CC430F613x, CC430F612x, CC430F513x MSP430 SoC with RF Core (Rev. F) pg86
 #define RADIO_RSSI_OFFSET_868MHZ (74)
@@ -239,6 +239,7 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
   //rx_data = (packet_data_t*)(buffer + sizeof(packet_header_t));
   packet_footer_t* footer; 
   uint8_t* tx_data = ( (packet_data_t*)(tx_buffer + sizeof(packet_header_t)) )->samples;
+  int i;
   
   // Add one to account for the byte with the packet length
   footer = (packet_footer_t*)(buffer + header->length + 1 );
@@ -279,16 +280,17 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
   //Process any recv packets
   //check for correct packet
   if( header->type == 0xAA && header->flags == 0x55 ){
-    uart_write( "# ", 2 );
-    print_rssi( header->source, &buffer[6], &buffer[7] );
+    //uart_write( "# ", 2 );
+    //print_rssi( header->source, &buffer[6], &buffer[7] );
 
-//More generalized code where each pkt can have >1 rssi
-//     
-//     for( int i = 1;
-//	    buffer[i] != 0 && buffer[i+1] != 0 && i < PACKET_LEN-3 ;
-// 	    i+=2;){
-//       print_rssi( header->source, &buffer[6], &buffer[7] );
-//     }
+    //More generalized code where each pkt can have >1 rssi
+    for( i = 6; 
+	!(buffer[i] == 0 && buffer[i+1] == 0) && i < PACKET_LEN-3 ;
+	i+=2)
+    {
+      uart_write( "# ", 2 );
+      print_rssi( header->source, &buffer[i], &buffer[i+1] );
+    }
   }
   
   //Print whole packet in hex
