@@ -24,7 +24,7 @@ uint8_t print_buffer[200];
 uint8_t tx_buffer_cnt = 0;
 
 #define TOTAL_SAMPLES (50)
-#define DEVICE_ADDRESS 0
+#define DEVICE_ADDRESS 1
 //TI supplied offsets at Ta = 25 deg C, Vcc = 3V with EM430F6137RF90
 //CC430F613x, CC430F612x, CC430F513x MSP430 SoC with RF Core (Rev. F) pg86
 #define RADIO_RSSI_OFFSET_868MHZ (74)
@@ -202,10 +202,15 @@ uint8_t fake_button_press()
 uint8_t print_rssi( uint8_t pkt_reciever, uint8_t* pkt_source, uint8_t* pkt_rssi ){
   uint8_t bufLen = 0;
   
-  uart_write( "Recv by: ", 9 );
+  //Disable printing if high numbered device (no uart available)
+  if ( DEVICE_ADDRESS > 3 ){
+    return 0;
+  }
+  
+  uart_write( "[", 1 );
   hex_to_string( print_buffer, &pkt_reciever, 1 );
   uart_write( print_buffer, 2 );
-  uart_write( " ", 1 );
+  uart_write( "] ", 2 );
   
   uart_write( "Pkt From: ", 10 );
   hex_to_string( print_buffer, pkt_source, 1 );
@@ -260,7 +265,7 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
 //   uart_write( print_buffer, 2 );
 //   uart_write( "\r\n", 2 );
   
-  uart_write( "! ", 2 );
+  uart_write( "!", 1 );
   print_rssi( DEVICE_ADDRESS, &header->source, &footer->rssi );
   
   //Send Recived RSSI values out OTA in next TX packet
@@ -271,11 +276,11 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
 //   tx_buffer[6] = header->source;	//Who sent pkt with following rssi
 //   tx_buffer[7] = footer->rssi;
   tx_data[0] = 0x7A;
-  tx_data[1] = 0x7B;
   //Need semaphore for tx_buffer_cnt
   tx_data[2 + tx_buffer_cnt] = header->source;	//Who sent pkt with following rssi
   tx_data[3 + tx_buffer_cnt] = footer->rssi;
   tx_buffer_cnt+=2;
+  tx_data[1] = tx_buffer_cnt;
   
   //Process any recv packets
   //check for correct packet
@@ -285,11 +290,14 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
 
     //More generalized code where each pkt can have >1 rssi
     for( i = 6; 
-	!(buffer[i] == 0 && buffer[i+1] == 0) && i < PACKET_LEN-3 ;
+	i < (buffer[5] + 6);
+	// !(buffer[i] == 0 && buffer[i+1] == 0) && i < PACKET_LEN-3 ;
 	i+=2)
     {
-      uart_write( "# ", 2 );
-      print_rssi( header->source, &buffer[i], &buffer[i+1] );
+      //if ( header->source != DEVICE_ADDRESS ){
+	uart_write( "#", 1 );
+	print_rssi( header->source, &buffer[i], &buffer[i+1] );
+      //}
     }
   }
   
