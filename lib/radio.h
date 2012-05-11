@@ -16,7 +16,7 @@
 #define RSSI_IDX_OFFSET (-2) // Index of appended RSSI
 #define CRC_LQI_IDX_OFFSET (-1) // Index of appended LQI, checksum
 #define CRC_OK (BIT7) // CRC_OK bit
-#define PATABLE_VAL (0x51) // 0 dBm output
+#define PATABLE_VAL (0x8E) // 0 dBm output
 
 #define RADIO_RX 0
 #define RADIO_TX 1
