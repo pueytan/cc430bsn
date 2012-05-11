@@ -22,9 +22,9 @@ uint8_t tx_buffer[PACKET_LEN+1];
 uint8_t buttonPressed = 1;
 uint8_t print_buffer[200];
 uint8_t tx_buffer_cnt = 0;
+uint8_t packet_id = 1;
 
 #define TOTAL_SAMPLES (50)
-#define DEVICE_ADDRESS 1
 //TI supplied offsets at Ta = 25 deg C, Vcc = 3V with EM430F6137RF90
 //CC430F613x, CC430F612x, CC430F513x MSP430 SoC with RF Core (Rev. F) pg86
 #define RADIO_RSSI_OFFSET_868MHZ (74)
@@ -53,6 +53,13 @@ typedef struct
 uint8_t hex_to_string( uint8_t*, uint8_t*, uint8_t );
 uint8_t fake_button_press();
 uint8_t process_rx( uint8_t*, uint8_t );
+
+
+
+inline uint8_t wban_tx(){
+  
+  return 0;
+}
 
 int main( void )
 {
@@ -111,6 +118,10 @@ int main( void )
       led1_toggle(); // Pulse LED during Transmit
       buttonPressed = 0;
       
+      if( DEVICE_ADDRESS > 9 ){
+	wban_tx();
+      }
+      
       radio_tx( tx_buffer, sizeof(tx_buffer) );
       //Need semaphore for tx_buffer_cnt;
       tx_buffer_cnt = 0;
@@ -147,7 +158,7 @@ uint8_t hex_to_string( uint8_t* buffer_out, uint8_t* buffer_in,
 /*******************************************************************************
  * @fn     uint8_t rssi_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
  *                                          uint8_t buffer_in_size  )
- * @brief  Used to convert hex values to [hex]string format
+ * @brief  Used to convert raw rssi values to decimal string format
  * @return Size of string in buffer_out, excluding \0
  * ****************************************************************************/
 uint8_t rssi_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
@@ -171,9 +182,9 @@ uint8_t rssi_to_string( uint8_t* buffer_out, uint8_t* buffer_in,
 
 
 /*******************************************************************************
- * @fn     uint8_t rssi_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
+ * @fn     uint8_t int_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
  *                                          uint8_t buffer_in_size  )
- * @brief  Used to convert hex values to [hex]string format
+ * @brief  Used to convert hex values to [decimal]string format
  * @return Size of string in buffer_out, excluding \0
  * ****************************************************************************/
 uint8_t int_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
@@ -199,7 +210,7 @@ uint8_t fake_button_press()
   return 1;
 }
 
-uint8_t print_rssi( uint8_t pkt_reciever, uint8_t* pkt_source, uint8_t* pkt_rssi ){
+uint8_t print_rssi( uint8_t pkt_reciever, uint8_t* pkt_source, uint8_t* pkt_rssi, uint8_t pkt_id ){
   uint8_t bufLen = 0;
   
   //Disable printing if high numbered device (no uart available)
@@ -211,9 +222,14 @@ uint8_t print_rssi( uint8_t pkt_reciever, uint8_t* pkt_source, uint8_t* pkt_rssi
   hex_to_string( print_buffer, &pkt_reciever, 1 );
   uart_write( print_buffer, 2 );
   uart_write( "] ", 2 );
-  
+   
   uart_write( "Pkt From: ", 10 );
   hex_to_string( print_buffer, pkt_source, 1 );
+  uart_write( print_buffer, 2 );
+  uart_write( " ", 1 );
+  
+  uart_write( "PID: ", 5 );
+  hex_to_string( print_buffer, &pkt_id, 1 );
   uart_write( print_buffer, 2 );
   uart_write( " ", 1 );
   
@@ -227,17 +243,32 @@ uint8_t print_rssi( uint8_t pkt_reciever, uint8_t* pkt_source, uint8_t* pkt_rssi
   uart_write( print_buffer, bufLen );
   uart_write( " dBm \n", 6 );
   
-  led2_toggle();
+  //led2_toggle();
   
   return 1;
 }
 
-/*******************************************************************************
- * @fn     uint8_t process_rx( uint8_t* buffer, uint8_t size )
- * @brief  callback function called when new message is received
- * ****************************************************************************/
-uint8_t process_rx( uint8_t* buffer, uint8_t size )
-{
+
+void pack_recv_rssi_in_tx( packet_header_t* header, packet_footer_t* footer, uint8_t* tx_data ){
+   //Send Recived RSSI values out OTA in next TX packet
+
+  tx_data[0] = 0x7A;				
+  //Need semaphore for tx_buffer_cnt		//Header
+  tx_data[2 + tx_buffer_cnt] = header->source;	//Who sent pkt with following rssi
+  tx_data[3 + tx_buffer_cnt] = footer->rssi;	//Recv RSSI
+  tx_data[4 + tx_buffer_cnt] = packet_id++;	//Packet ID, sequential
+  tx_buffer_cnt+=3;				//Increment num bytes used
+  tx_data[1] = tx_buffer_cnt;			//Store num of bytes used in next tx packet
+   
+}
+
+inline uint8_t process_rx_wban( uint8_t* buffer, uint8_t size ){
+
+  
+  return 0;
+}
+
+inline uint8_t process_rx_ap( uint8_t* buffer, uint8_t size ){
   packet_header_t* header;
   header = (packet_header_t*)buffer;
   //packet_data_t* rx_data;
@@ -265,22 +296,12 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
 //   uart_write( print_buffer, 2 );
 //   uart_write( "\r\n", 2 );
   
+  //Print stats for this recv packet
   uart_write( "!", 1 );
-  print_rssi( DEVICE_ADDRESS, &header->source, &footer->rssi );
+  print_rssi( DEVICE_ADDRESS, &header->source, &footer->rssi, packet_id );
   
   //Send Recived RSSI values out OTA in next TX packet
-  //uint8_t
-//   tx_buffer[4] = 0x7A;
-//   tx_buffer[5] = 0x7B;
-//   //Need semaphore for tx_buffer_cnt
-//   tx_buffer[6] = header->source;	//Who sent pkt with following rssi
-//   tx_buffer[7] = footer->rssi;
-  tx_data[0] = 0x7A;
-  //Need semaphore for tx_buffer_cnt
-  tx_data[2 + tx_buffer_cnt] = header->source;	//Who sent pkt with following rssi
-  tx_data[3 + tx_buffer_cnt] = footer->rssi;
-  tx_buffer_cnt+=2;
-  tx_data[1] = tx_buffer_cnt;
+  pack_recv_rssi_in_tx( header, footer, tx_data );
   
   //Process any recv packets
   //check for correct packet
@@ -292,20 +313,31 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
     for( i = 6; 
 	i < (buffer[5] + 6);
 	// !(buffer[i] == 0 && buffer[i+1] == 0) && i < PACKET_LEN-3 ;
-	i+=2)
+	i+=3)
     {
       //if ( header->source != DEVICE_ADDRESS ){
 	uart_write( "#", 1 );
-	print_rssi( header->source, &buffer[i], &buffer[i+1] );
+	print_rssi( header->source, &buffer[i], &buffer[i+1], buffer[i+2] );
       //}
     }
   }
-  
-  //Print whole packet in hex
-  hex_to_string( print_buffer, buffer, size );
-  uart_write( print_buffer, (size)*2 );
-  uart_write( "\r\n", 2 );
-  
+    //Print whole packet in hex
+//   hex_to_string( print_buffer, buffer, size );
+//   uart_write( print_buffer, (size)*2 );
+//   uart_write( "\r\n", 2 );
+  return 0;
+}
+
+
+
+/*******************************************************************************
+ * @fn     uint8_t process_rx( uint8_t* buffer, uint8_t size )
+ * @brief  callback function called when new message is received
+ * ****************************************************************************/
+uint8_t process_rx( uint8_t* buffer, uint8_t size )
+{
+  process_rx_ap( buffer, size );
+
   // Erase buffer just for fun
   memset( buffer, 0x00, size );
   
