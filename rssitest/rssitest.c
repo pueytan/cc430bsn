@@ -190,13 +190,13 @@ uint8_t rssi_to_string( uint8_t* buffer_out, uint8_t* buffer_in,
 uint8_t int_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
                                     uint8_t buffer_in_size  )
 {
-  uint8_t counter = 0;
+  uint8_t cnt = 0;
   
-  while(counter < buffer_in_size*2 )
+  while(cnt < buffer_in_size*2 )
   {  
-    counter += sprintf( &buffer_out[counter], "%d", buffer_in[counter>>1] & 0xFF );
+    cnt += sprintf( &buffer_out[cnt], "%d", buffer_in[cnt>>1] & 0xFF );
   }
-  return counter;
+  return cnt;
 }
 
 /*******************************************************************************
@@ -210,7 +210,8 @@ uint8_t fake_button_press()
   return 1;
 }
 
-uint8_t print_rssi( uint8_t pkt_reciever, uint8_t* pkt_source, uint8_t* pkt_rssi, uint8_t pkt_id ){
+uint8_t print_rssi( uint8_t pkt_reciever, uint8_t* pkt_source, 
+		    uint8_t* pkt_rssi, uint8_t pkt_id ){
   uint8_t bufLen = 0;
   
   //Disable printing if high numbered device (no uart available)
@@ -249,37 +250,35 @@ uint8_t print_rssi( uint8_t pkt_reciever, uint8_t* pkt_source, uint8_t* pkt_rssi
 }
 
 
-void pack_recv_rssi_in_tx( packet_header_t* header, packet_footer_t* footer, uint8_t* tx_data ){
+void pack_recv_rssi_in_tx( packet_header_t* header, packet_footer_t* footer,
+			   uint8_t* tx_data, uint8_t* buffer ){
    //Send Recived RSSI values out OTA in next TX packet
 
   tx_data[0] = 0x7A;				
   //Need semaphore for tx_buffer_cnt		//Header
-  tx_data[2 + tx_buffer_cnt] = header->source;	//Who sent pkt with following rssi
+  tx_data[2 + tx_buffer_cnt] = header->source;	//pkt sender with following rssi
   tx_data[3 + tx_buffer_cnt] = footer->rssi;	//Recv RSSI
+#if DEVICE_ADDRESS < 0x0A  
+  tx_data[4 + tx_buffer_cnt] = buffer[6+2];	//Packet ID, sequential
+#else
   tx_data[4 + tx_buffer_cnt] = packet_id++;	//Packet ID, sequential
+#endif
   tx_buffer_cnt+=3;				//Increment num bytes used
-  tx_data[1] = tx_buffer_cnt;			//Store num of bytes used in next tx packet
+  tx_data[1] = tx_buffer_cnt;			//Store # bytes used in next pkt
    
 }
 
-inline uint8_t process_rx_wban( uint8_t* buffer, uint8_t size ){
-
+inline uint8_t process_rx_wban(uint8_t* buffer, uint8_t size, packet_header_t* header, 
+			     packet_footer_t* footer, uint8_t* tx_data){
+  
+  //Send Recived RSSI values out OTA in next TX packet
+  pack_recv_rssi_in_tx( header, footer, tx_data, buffer );
   
   return 0;
 }
 
-inline uint8_t process_rx_ap( uint8_t* buffer, uint8_t size ){
-  packet_header_t* header;
-  header = (packet_header_t*)buffer;
-  //packet_data_t* rx_data;
-  //rx_data = (packet_data_t*)(buffer + sizeof(packet_header_t));
-  packet_footer_t* footer; 
-  uint8_t* tx_data = ( (packet_data_t*)(tx_buffer + sizeof(packet_header_t)) )->samples;
-  int i;
-  
-  // Add one to account for the byte with the packet length
-  footer = (packet_footer_t*)(buffer + header->length + 1 );
-  
+void process_rx_debug(uint8_t* buffer, uint8_t size, packet_header_t* header, 
+			     packet_footer_t* footer, uint8_t* tx_data){
   // Print incoming packet information for debugging
 //   uart_write( "Size: ", 6 );
 //   hex_to_string( print_buffer, &header->length, 1 );
@@ -294,37 +293,43 @@ inline uint8_t process_rx_ap( uint8_t* buffer, uint8_t size ){
 //   uart_write( " Flags: ", 8 );
 //   hex_to_string( print_buffer, &header->flags, 1 );
 //   uart_write( print_buffer, 2 );
-//   uart_write( "\r\n", 2 );
-  
-  //Print stats for this recv packet
-  uart_write( "!", 1 );
-  print_rssi( DEVICE_ADDRESS, &header->source, &footer->rssi, packet_id );
-  
-  //Send Recived RSSI values out OTA in next TX packet
-  pack_recv_rssi_in_tx( header, footer, tx_data );
-  
-  //Process any recv packets
-  //check for correct packet
-  if( header->type == 0xAA && header->flags == 0x55 ){
-    //uart_write( "# ", 2 );
-    //print_rssi( header->source, &buffer[6], &buffer[7] );
+//   uart_write( "\r\n", 2 ); 
 
-    //More generalized code where each pkt can have >1 rssi
-    for( i = 6; 
-	i < (buffer[5] + 6);
-	// !(buffer[i] == 0 && buffer[i+1] == 0) && i < PACKET_LEN-3 ;
-	i+=3)
-    {
-      //if ( header->source != DEVICE_ADDRESS ){
-	uart_write( "#", 1 );
-	print_rssi( header->source, &buffer[i], &buffer[i+1], buffer[i+2] );
-      //}
-    }
-  }
     //Print whole packet in hex
 //   hex_to_string( print_buffer, buffer, size );
 //   uart_write( print_buffer, (size)*2 );
 //   uart_write( "\r\n", 2 );
+}
+
+inline uint8_t process_rx_ap(uint8_t* buffer, uint8_t size, packet_header_t* header, 
+			     packet_footer_t* footer, uint8_t* tx_data){
+  int i;
+  
+  //Print stats for this recv packet
+  uart_write( "!", 1 );
+  print_rssi( DEVICE_ADDRESS, &header->source, &footer->rssi, buffer[6+2] );
+  
+  //Send Recived RSSI values out OTA in next TX packet
+  pack_recv_rssi_in_tx( header, footer, tx_data, buffer );
+  
+  //Process any recv packets
+  //check for correct packet
+  if( header->type == 0xAA && header->flags == 0x55 ){
+    //More generalized code where each pkt can have >1 rssi
+    for( i = 6; 		//first group of data starts at buffer[6]
+	i < (buffer[5] + 6);	//Buffer[5] = num data bytes in pkt
+	i+=3)			//3 bytes per data group
+    {
+      //if ( header->source != DEVICE_ADDRESS ){
+	uart_write( "#", 1 );
+	print_rssi( header->source, 	//device which sent pkt
+		    &buffer[i], 	//orig pkt src as seen by remote device
+		    &buffer[i+1],	//rssi of pkt seen by remote device
+		    buffer[i+2] );	//packet_id of packet seen by remote
+      //}
+    }
+  }
+
   return 0;
 }
 
@@ -336,8 +341,21 @@ inline uint8_t process_rx_ap( uint8_t* buffer, uint8_t size ){
  * ****************************************************************************/
 uint8_t process_rx( uint8_t* buffer, uint8_t size )
 {
-  process_rx_ap( buffer, size );
-
+  //Initialize
+  packet_header_t* header;
+  header = (packet_header_t*)buffer;
+  packet_footer_t* footer; 
+  uint8_t* tx_data = ( (packet_data_t*)(tx_buffer + sizeof(packet_header_t)) )->samples;
+  
+  // Add one to account for the byte with the packet length
+  footer = (packet_footer_t*)(buffer + header->length + 1 );
+  
+#if DEVICE_ADDRESS < 0x0A
+  process_rx_ap( buffer, size, header, footer, tx_data );
+#else
+  process_rx_wban( buffer, size, header, footer, tx_data );
+#endif
+  
   // Erase buffer just for fun
   memset( buffer, 0x00, size );
   
