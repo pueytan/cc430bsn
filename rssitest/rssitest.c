@@ -121,6 +121,7 @@ inline uint8_t process_rx_ap(uint8_t* buffer, uint8_t size, packet_header_t* hea
 	if( buffer[i+2] != packet_id_rx ){
 	  packet_id_rx = buffer[i+2];
 	  init_rssi_array();
+	  signal_yellow();
 	}
 	  packet_rssi[ header->source ] = buffer[i+1];
       //}
@@ -140,7 +141,7 @@ void pack_recv_rssi_in_tx( packet_header_t* header, packet_footer_t* footer,
   tx_data[2 + tx_buffer_cnt] = header->source;	//pkt sender with following rssi
   tx_data[3 + tx_buffer_cnt] = footer->rssi;	//Recv RSSI
 #if DEVICE_ADDRESS < 0x0A  
-  tx_data[4 + tx_buffer_cnt] = buffer[6+2];	//Packet ID, sequential
+  tx_data[4 + tx_buffer_cnt] = buffer[6+2];	//Packet ID, copy from recv
 #else
   tx_data[4 + tx_buffer_cnt] = packet_id_tx++;	//Packet ID, sequential
 #endif
@@ -301,7 +302,13 @@ uint8_t fake_button_press()
   buttonPressed = 1;
   
   //setup timer to trigger ~once per second
+#if DEVICE_ADDRESS < 0x0A
+  //AP - Vibe Dev
+  increment_ccr(TOTAL_CCRS, 32768);
+#else
+  //WBAN - SimpVibe1
   set_ccr(TOTAL_CCRS, 32768);
+#endif
   
   return 1;
 }

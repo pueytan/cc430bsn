@@ -19,7 +19,7 @@
 #include "radio.h"
 
 #define DEBUG 100
-#define DEVICE_ADDRESS 1
+#define DEVICE_ADDRESS 0xA
 
 #define TOTAL_SAMPLES (50)
 //TI supplied offsets at Ta = 25 deg C, Vcc = 3V with EM430F6137RF90
