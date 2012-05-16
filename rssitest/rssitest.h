@@ -9,17 +9,19 @@
 *       derived from work by M. Morales/D. Dang of Texas Instruments
 */
 #include <stdio.h>
-#include "common.h"
-#include <signal.h>
 #include <string.h>
+
+#include "common.h"
+#include "intrinsics.h"
 #include "leds.h"
+#include "timers.h"
+#include <signal.h>
 #include "oscillator.h"
 #include "uart.h"
-#include "timers.h"
 #include "radio.h"
 
-#define DEBUG 100
-#define DEVICE_ADDRESS 0xA
+#define DEBUG 0
+#define DEVICE_ADDRESS 0x01
 
 #define TOTAL_SAMPLES (50)
 //TI supplied offsets at Ta = 25 deg C, Vcc = 3V with EM430F6137RF90
@@ -36,7 +38,6 @@ uint8_t tx_buffer_cnt = 0;
 uint8_t packet_id_tx = 0;
 uint8_t packet_id_rx = 0;
 uint8_t packet_rssi[RADIO_NUM_APS];	//Current rx packet's RSSIs
-
 
 typedef struct
 {

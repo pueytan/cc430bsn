@@ -18,13 +18,12 @@
 uint8_t process_rx( uint8_t* buffer, uint8_t size )
 {
   //Initialize
-  packet_header_t* header;
+  static packet_header_t* header;
+  static packet_footer_t* footer; 
   header = (packet_header_t*)buffer;
-  packet_footer_t* footer; 
-  uint8_t* tx_data = ( (packet_data_t*)(tx_buffer + sizeof(packet_header_t)) )->samples;
-  
   // Add one to account for the byte with the packet length
   footer = (packet_footer_t*)(buffer + header->length + 1 );
+  static uint8_t* tx_data = ( (packet_data_t*)(tx_buffer + sizeof(packet_header_t)) )->samples;
   
 #if DEVICE_ADDRESS < 0x0A
   process_rx_ap( buffer, size, header, footer, tx_data );
@@ -33,7 +32,7 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
 #endif
   
   // Erase buffer just for fun
-  memset( buffer, 0x00, size );
+  //memset( buffer, 0x00, size );
   
   //Pulse Red LED during recieve
   signal_rx();
@@ -41,15 +40,18 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
 }
 
 
-inline void process_tx(){
-      signal_tx();    // Pulse LED during Transmit     
+inline void process_tx( uint8_t* tx_data ){
+      #if DEVICE_ADDRESS >= xA
+	tx_data[4] = packet_id_tx++;	//Packet ID, sequential
+      #endif
+      tx_buffer_cnt = 0;		//ideally semaphore for tx_buffer_cnt
+      
       radio_tx( tx_buffer, sizeof(tx_buffer) );
-      //Need semaphore for tx_buffer_cnt;
-      tx_buffer_cnt = 0;
-      //uart_write( "\r\nTx\r\n", 6 );  
+      signal_tx();    // Pulse LED during Transmit
 }
 
 
+#if DEVICE_ADDRESS >= 0xA
 inline uint8_t process_rx_wban(uint8_t* buffer, uint8_t size, packet_header_t* header, 
 			     packet_footer_t* footer, uint8_t* tx_data){
   
@@ -58,8 +60,10 @@ inline uint8_t process_rx_wban(uint8_t* buffer, uint8_t size, packet_header_t* h
   
   return 0;
 }
+#endif
 
 
+#if DEVICE_ADDRESS < 0xA
 void process_rx_debug(uint8_t* buffer, uint8_t size, packet_header_t* header, 
 			     packet_footer_t* footer, uint8_t* tx_data){
   // Print incoming packet information for debugging
@@ -83,8 +87,10 @@ void process_rx_debug(uint8_t* buffer, uint8_t size, packet_header_t* header,
 //   uart_write( print_buffer, (size)*2 );
 //   uart_write( "\r\n", 2 );
 }
+#endif
 
 
+#if DEVICE_ADDRESS < 0xA
 inline uint8_t process_rx_ap(uint8_t* buffer, uint8_t size, packet_header_t* header, 
 			     packet_footer_t* footer, uint8_t* tx_data){
   int i;
@@ -130,27 +136,25 @@ inline uint8_t process_rx_ap(uint8_t* buffer, uint8_t size, packet_header_t* hea
 
   return 0;
 }
+#endif
 
 
 void pack_recv_rssi_in_tx( packet_header_t* header, packet_footer_t* footer,
 			   uint8_t* tx_data, uint8_t* buffer ){
    //Send Recived RSSI values out OTA in next TX packet
 
-  tx_data[0] = 0x7A;				
-  //Need semaphore for tx_buffer_cnt		//Header
+  //Need semaphore for tx_buffer_cnt		
   tx_data[2 + tx_buffer_cnt] = header->source;	//pkt sender with following rssi
   tx_data[3 + tx_buffer_cnt] = footer->rssi;	//Recv RSSI
 #if DEVICE_ADDRESS < 0x0A  
   tx_data[4 + tx_buffer_cnt] = buffer[6+2];	//Packet ID, copy from recv
-#else
-  tx_data[4 + tx_buffer_cnt] = packet_id_tx++;	//Packet ID, sequential
 #endif
   tx_buffer_cnt+=3;				//Increment num bytes used
   tx_data[1] = tx_buffer_cnt;			//Store # bytes used in next pkt
    
 }
 
-
+#if DEVICE_ADDRESS < 0xA
 /*******************************************************************************
  * @fn     uint8_t hex_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
  *                                          uint8_t buffer_in_size  )
@@ -292,6 +296,8 @@ inline void print_rssi_csv( uint8_t pkt_reciever, uint8_t* pkt_source,
   //Flush buffer
   uart_write( print_buffer, buf - print_buffer );
 }
+#endif
+
 
 /*******************************************************************************
  * @fn     uint8_t fake_button_press()
@@ -300,16 +306,6 @@ inline void print_rssi_csv( uint8_t pkt_reciever, uint8_t* pkt_source,
 uint8_t fake_button_press()
 {
   buttonPressed = 1;
-  
-  //setup timer to trigger ~once per second
-#if DEVICE_ADDRESS < 0x0A
-  //AP - Vibe Dev
-  increment_ccr(TOTAL_CCRS, 32768);
-#else
-  //WBAN - SimpVibe1
-  set_ccr(TOTAL_CCRS, 32768);
-#endif
-  
   return 1;
 }
 
@@ -359,14 +355,14 @@ inline void signal_yellow(){
 int main( void )
 {
   uint8_t j;
-  packet_data_t* tx_data;
+  uint8_t* tx_data;
   packet_header_t* header;
 
   // Stop watchdog timer to prevent time out reset
   WDTCTL = WDTPW + WDTHOLD;
   
   header = (packet_header_t*)tx_buffer;
-  tx_data = (packet_data_t*)(tx_buffer + sizeof(packet_header_t));
+  tx_data = ( (packet_data_t*)(tx_buffer + sizeof(packet_header_t)) )->samples;
   
   // Initialize Tx Buffer
   header->length = PACKET_LEN;
@@ -383,7 +379,7 @@ int main( void )
   for( j=0; j < TOTAL_SAMPLES; j++ )
   {
     //tx_data->samples[j] = j;
-    tx_data->samples[j] = 0;
+    tx_data[j] = 0;
   }
   
   //Initialize all rssi vals to below noise floor, -138 dBm
@@ -409,16 +405,18 @@ int main( void )
   
   // Enable interrupts, otherwise nothing will work
   eint();
-   
+  
+  //Tx Header
+  tx_data[0] = 0x7A;
+  
   while (1)
   {
     // Enter sleep mode
-    __bis_SR_register( LPM3_bits + GIE );
-    __no_operation();
-    __no_operation();
+    //__bis_SR_register( LPM3_bits + GIE );
+
     if (buttonPressed) // Process a button press->transmit
     {
-      process_tx();
+      process_tx( tx_data );
       buttonPressed = 0;
     }
   }
