@@ -94,7 +94,6 @@ void process_rx_debug(uint8_t* buffer, uint8_t size, packet_header_t* header,
 inline uint8_t process_rx_ap(uint8_t* buffer, uint8_t size, packet_header_t* header, 
 			     packet_footer_t* footer, uint8_t* tx_data){
   int i;
- 
   
 #if debug < 99
   //Only print stats for packets from WBAN in csv mode
@@ -104,9 +103,17 @@ inline uint8_t process_rx_ap(uint8_t* buffer, uint8_t size, packet_header_t* hea
   if( 1 ){
 #endif
     //Print stats for this recv packet
+    uart_write( "#", 1 );
     print_rssi( DEVICE_ADDRESS, &header->source, &footer->rssi, buffer[6+2] );
     //Send Recived RSSI values from WBAN out OTA in next TX packet
     pack_recv_rssi_in_tx( header, footer, tx_data, buffer );
+    
+    //If next packet id is seen, clear all stale RSSIs
+    if( buffer[6+2] != packet_id_rx ){
+      packet_id_rx = buffer[6+2];
+      init_rssi_array();
+      //signal_yellow();
+    }
   }
 
   //Process any recv packets
@@ -123,11 +130,11 @@ inline uint8_t process_rx_ap(uint8_t* buffer, uint8_t size, packet_header_t* hea
 		    &buffer[i+1],	//rssi of pkt seen by remote device
 		    buffer[i+2] );	//packet_id of packet seen by remote
 	
-	//If next packet is seen, clear all stale RSSIs
+	//If next packet id is seen, clear all stale RSSIs
 	if( buffer[i+2] != packet_id_rx ){
 	  packet_id_rx = buffer[i+2];
 	  init_rssi_array();
-	  signal_yellow();
+	  //signal_yellow();
 	}
 	  packet_rssi[ header->source ] = buffer[i+1];
       //}
@@ -286,7 +293,7 @@ inline void print_rssi_csv( uint8_t pkt_reciever, uint8_t* pkt_source,
   *buf++ = ',';
 
   //AP which recv beacon from wban
-  buf += hex_to_string( buf, pkt_source, 1 );
+  buf += hex_to_string( buf, &pkt_reciever, 1 );
   *buf++ = ',';
   
   //RSSI of beacon seen by AP
@@ -306,6 +313,10 @@ inline void print_rssi_csv( uint8_t pkt_reciever, uint8_t* pkt_source,
 uint8_t fake_button_press()
 {
   buttonPressed = 1;
+  
+  //Disable timer until next packet seen
+  //clear_ccr(TOTAL_CCRS);
+  signal_yellow();
   return 1;
 }
 
@@ -395,11 +406,12 @@ int main( void )
   setup_leds();
   
   // Initialize timer
-  setup_timer_a(MODE_CONTINUOUS);
+  setup_timer_a(MODE_UP);
   
   // Send fake button press every ~2 seconds
-  register_timer_callback( fake_button_press, TOTAL_CCRS );
- 
+  register_timer_callback( fake_button_press, 0 );
+  set_ccr(0, 16400);	// 1/2 second
+  
   // Initialize radio and enable receive callback function
   setup_radio( process_rx );
   
@@ -417,6 +429,7 @@ int main( void )
     if (buttonPressed) // Process a button press->transmit
     {
       process_tx( tx_data );
+      
       buttonPressed = 0;
     }
   }
