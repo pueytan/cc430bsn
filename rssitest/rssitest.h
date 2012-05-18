@@ -22,21 +22,19 @@
 #include "radio_ext.h"
 
 #define DEBUG 0
-#define DEVICE_ADDRESS 0x00
+#define DEVICE_ADDRESS 0x01
 
 #define RADIO_NUM_APS (2)
 #define PACKET_ID_MAX (255)
 
 uint8_t tx_buffer[PACKET_LEN+1];
-volatile uint8_t buttonPressed = 1;
+volatile uint8_t timerCalls = 1;
 uint8_t tx_buffer_cnt = 0;
 uint8_t packet_id_tx = 0;
 uint8_t packet_id_rx = 0;
 uint8_t packet_group = 0;
 uint8_t packet_rssi[RADIO_NUM_APS];	//Current rx packet's RSSIs
-
 uint8_t hex_to_string( uint8_t*, uint8_t*, uint8_t );
-uint8_t fake_button_press();
 uint8_t process_rx( uint8_t*, uint8_t );
 int num_tx;
 
@@ -50,12 +48,6 @@ inline void signal_tx();
 inline void signal_yellow();
 
 int main( void );
-
-/*******************************************************************************
- * @fn     uint8_t fake_button_press()
- * @brief  Instead of using buttons, this function is called from a timer isr
- * ****************************************************************************/
-uint8_t fake_button_press();
 
 void pack_recv_rssi_in_tx( packet_header_t* header, packet_footer_t* footer,
 			   uint8_t* tx_data, uint8_t* buffer );

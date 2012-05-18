@@ -37,7 +37,7 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
 
       packet_id_rx = buffer[6+2];
       //init_rssi_array();
-      buttonPressed++;
+      timerCalls++;
       //signal_yellow();
     }
     
@@ -64,7 +64,7 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
 	  
 	  packet_id_rx = buffer[i+2];
 	  //init_rssi_array();
-	  buttonPressed++;
+	  timerCalls++;
 	  //signal_yellow();
 	}
 	packet_rssi[ header->source ] = buffer[i+1];
@@ -101,21 +101,6 @@ void pack_recv_rssi_in_tx( packet_header_t* header, packet_footer_t* footer,
   tx_data[4 + tx_buffer_cnt] = buffer[6+2];	//Packet ID, copy from recv
   tx_buffer_cnt+=3;				//Increment num bytes used
   tx_data[1] = tx_buffer_cnt;			//Store # bytes used in next pkt
-}
-
-
-/*******************************************************************************
- * @fn     uint8_t fake_button_press()
- * @brief  Instead of using buttons, this function is called from a timer isr
- * ****************************************************************************/
-uint8_t timer_callback()
-{
-  //buttonPressed = 1;
-  
-  //Disable timer until next packet seen
-  //clear_ccr(TOTAL_CCRS);
-  //signal_yellow();
-  return 1;
 }
 
 
@@ -188,7 +173,7 @@ int main( void )
   
   // Initialize UART for communications at 115200baud
   setup_uart();
-   
+
   // Initialize LEDs
   setup_leds();
   
@@ -200,7 +185,7 @@ int main( void )
   //set_ccr(0, 16400);	// 1/2 second
   
   // Initialize radio and enable receive callback function
-  setup_radio( process_rx );
+  setup_radio_pwr( process_rx, PATABLE_VAL_10DBM );
   
   // Enable interrupts, otherwise nothing will work
   eint();
@@ -214,8 +199,8 @@ int main( void )
     // Enter sleep mode
     //__bis_SR_register( LPM3_bits + GIE );
 
-    if (buttonPressed){ // Process a button press->transmit
-      buttonPressed = 0;
+    if (timerCalls){ // Process a button press->transmit
+      timerCalls = 0;
       signal_yellow();
       wait_loop( DEVICE_ADDRESS * 1200 );	//Wait device id * 100 ms
       process_tx( tx_data );			//Transmit data
