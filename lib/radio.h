@@ -12,11 +12,14 @@
 #include "RF1A.h"
 #include "hal_pmm.h"
 
-#define PACKET_LEN (54) // PACKET_LEN <= 61
+//#define PACKET_LEN (54) // PACKET_LEN <= 61
+#define PACKET_LEN (14) // PACKET_LEN <= 21
 #define RSSI_IDX_OFFSET (-2) // Index of appended RSSI
 #define CRC_LQI_IDX_OFFSET (-1) // Index of appended LQI, checksum
 #define CRC_OK (BIT7) // CRC_OK bit
-#define PATABLE_VAL (0x8E) // 0 dBm output
+#define PATABLE_VAL_0DBM (0x51)   // 0 dBm output
+#define PATABLE_VAL_7DBM  (0xC7) // +7 dBm output
+#define PATABLE_VAL_10DBM (0xC0) // +10 dBm output
 
 #define RADIO_RX 0
 #define RADIO_TX 1
