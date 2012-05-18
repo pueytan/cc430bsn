@@ -19,6 +19,7 @@
 #include "oscillator.h"
 #include "uart.h"
 #include "radio.h"
+#include "radio_ext.h"
 
 #define DEBUG 0
 #define DEVICE_ADDRESS 0x01
@@ -37,6 +38,7 @@ uint8_t print_buffer[200];
 uint8_t tx_buffer_cnt = 0;
 uint8_t packet_id_tx = 0;
 uint8_t packet_id_rx = 0;
+uint8_t packet_group = 0;
 uint8_t packet_rssi[RADIO_NUM_APS];	//Current rx packet's RSSIs
 
 typedef struct
@@ -61,6 +63,7 @@ typedef struct
 uint8_t hex_to_string( uint8_t*, uint8_t*, uint8_t );
 uint8_t fake_button_press();
 uint8_t process_rx( uint8_t*, uint8_t );
+int num_tx;
 
 inline uint8_t wban_tx();
 
@@ -74,46 +77,10 @@ inline void signal_yellow();
 int main( void );
 
 /*******************************************************************************
- * @fn     uint8_t hex_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
- *                                          uint8_t buffer_in_size  )
- * @brief  Used to convert hex values to [hex]string format
- * ****************************************************************************/
-uint8_t hex_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
-                                    uint8_t buffer_in_size  );
-
-/*******************************************************************************
- * @fn     uint8_t rssi_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
- *                                          uint8_t buffer_in_size  )
- * @brief  Used to convert raw rssi values to decimal string format
- * @return Size of string in buffer_out, excluding \0
- * ****************************************************************************/
-uint8_t rssi_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
-                                    uint8_t buffer_in_size  );
-
-
-/*******************************************************************************
- * @fn     uint8_t int_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
- *                                          uint8_t buffer_in_size  )
- * @brief  Used to convert hex values to [decimal]string format
- * @return Size of string in buffer_out, excluding \0
- * ****************************************************************************/
-uint8_t int_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
-                                    uint8_t buffer_in_size  );
-
-/*******************************************************************************
  * @fn     uint8_t fake_button_press()
  * @brief  Instead of using buttons, this function is called from a timer isr
  * ****************************************************************************/
 uint8_t fake_button_press();
-
-uint8_t print_rssi( uint8_t pkt_reciever, uint8_t* pkt_source, 
-		    uint8_t* pkt_rssi, uint8_t pkt_id );
-
-inline void print_rssi_debug( uint8_t pkt_reciever, uint8_t* pkt_source, 
-		    uint8_t* pkt_rssi, uint8_t pkt_id );
-
-inline void print_rssi_csv( uint8_t pkt_reciever, uint8_t* pkt_source, 
-		    uint8_t* pkt_rssi, uint8_t pkt_id );
 
 void pack_recv_rssi_in_tx( packet_header_t* header, packet_footer_t* footer,
 			   uint8_t* tx_data, uint8_t* buffer );
@@ -121,17 +88,11 @@ void pack_recv_rssi_in_tx( packet_header_t* header, packet_footer_t* footer,
 inline uint8_t process_rx_wban(uint8_t* buffer, uint8_t size, packet_header_t* header, 
 			     packet_footer_t* footer, uint8_t* tx_data);
 
-void process_rx_debug(uint8_t* buffer, uint8_t size, packet_header_t* header, 
-			     packet_footer_t* footer, uint8_t* tx_data);
-
 inline uint8_t process_rx_ap(uint8_t* buffer, uint8_t size, packet_header_t* header, 
 			     packet_footer_t* footer, uint8_t* tx_data);
-
 
 /*******************************************************************************
  * @fn     uint8_t process_rx( uint8_t* buffer, uint8_t size )
  * @brief  callback function called when new message is received
  * ****************************************************************************/
 uint8_t process_rx( uint8_t* buffer, uint8_t size );
-
-

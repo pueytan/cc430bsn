@@ -24,16 +24,59 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
   // Add one to account for the byte with the packet length
   footer = (packet_footer_t*)(buffer + header->length + 1 );
   static uint8_t* tx_data = ( (packet_data_t*)(tx_buffer + sizeof(packet_header_t)) )->samples;
-  
-#if DEVICE_ADDRESS < 0x0A
-  process_rx_ap( buffer, size, header, footer, tx_data );
-#else
-  process_rx_wban( buffer, size, header, footer, tx_data );
-#endif
-  
-  // Erase buffer just for fun
-  //memset( buffer, 0x00, size );
-  
+  static int i;
+
+  if( header->type == 0xAB && header->flags == 0x55 ){
+    //Send Recived RSSI values from WBAN out OTA in next TX packet
+    pack_recv_rssi_in_tx( header, footer, tx_data, buffer );
+    
+    //If next packet id is seen, clear all stale RSSIs
+    if( buffer[6+2] != packet_id_rx ){
+      if( buffer[6+2] < packet_id_rx )
+	packet_group++;
+
+      packet_id_rx = buffer[6+2];
+      //init_rssi_array();
+      buttonPressed++;
+      //signal_yellow();
+    }
+    
+    //Print stats for this packet from WBAN
+    //uart_write( "#", 1 );
+    print_rssi( DEVICE_ADDRESS, &header->source, &footer->rssi, buffer[6+2], packet_group);
+  }
+
+  //Process any recv packets
+  //check for correct packet
+  if( header->type == 0xAA && header->flags == 0x55 ){
+    //TODO:Print AP-AP RSSI once a while
+    
+    //Packet from another AP
+    //More generalized code where each pkt can have >1 rssi
+    for( i = 6; 		//first group of data starts at buffer[6]
+	i < (buffer[5] + 6);	//Buffer[5] = num data bytes in pkt
+	i+=3)			//3 bytes per data group
+    {
+	//If next packet id is seen, clear all stale RSSIs
+	if( buffer[i+2] != packet_id_rx ){
+	  if( buffer[6+2] < packet_id_rx )
+	    packet_group++;
+	  
+	  packet_id_rx = buffer[i+2];
+	  //init_rssi_array();
+	  buttonPressed++;
+	  //signal_yellow();
+	}
+	packet_rssi[ header->source ] = buffer[i+1];
+      
+	print_rssi( header->source, 	//device which sent pkt
+		    &buffer[i], 	//orig pkt src as seen by remote device
+		    &buffer[i+1],	//rssi of pkt seen by remote device
+		    buffer[i+2], 	//packet_id of packet seen by remote
+		    packet_group);	//header to distinguish waves of pids
+    }
+  }
+    
   //Pulse Red LED during recieve
   signal_rx();
   return 1;
@@ -41,109 +84,11 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
 
 
 inline void process_tx( uint8_t* tx_data ){
-      #if DEVICE_ADDRESS >= xA
-	tx_data[4] = packet_id_tx++;	//Packet ID, sequential
-      #endif
       tx_buffer_cnt = 0;		//ideally semaphore for tx_buffer_cnt
       
       radio_tx( tx_buffer, sizeof(tx_buffer) );
       signal_tx();    // Pulse LED during Transmit
 }
-
-
-#if DEVICE_ADDRESS >= 0xA
-inline uint8_t process_rx_wban(uint8_t* buffer, uint8_t size, packet_header_t* header, 
-			     packet_footer_t* footer, uint8_t* tx_data){
-  
-  //Send Recived RSSI values out OTA in next TX packet
-  pack_recv_rssi_in_tx( header, footer, tx_data, buffer );
-  
-  return 0;
-}
-#endif
-
-
-#if DEVICE_ADDRESS < 0xA
-void process_rx_debug(uint8_t* buffer, uint8_t size, packet_header_t* header, 
-			     packet_footer_t* footer, uint8_t* tx_data){
-  // Print incoming packet information for debugging
-//   uart_write( "Size: ", 6 );
-//   hex_to_string( print_buffer, &header->length, 1 );
-//   uart_write( print_buffer, 2 );
-//   //uart_write( "\r\n", 2 );
-
-//   uart_write( " Type: ", 7 );
-//   hex_to_string( print_buffer, &header->type, 1 );
-//   uart_write( print_buffer, 2 );
-//   uart_write( "\r\n", 2 );
-//   
-//   uart_write( " Flags: ", 8 );
-//   hex_to_string( print_buffer, &header->flags, 1 );
-//   uart_write( print_buffer, 2 );
-//   uart_write( "\r\n", 2 ); 
-
-    //Print whole packet in hex
-//   hex_to_string( print_buffer, buffer, size );
-//   uart_write( print_buffer, (size)*2 );
-//   uart_write( "\r\n", 2 );
-}
-#endif
-
-
-#if DEVICE_ADDRESS < 0xA
-inline uint8_t process_rx_ap(uint8_t* buffer, uint8_t size, packet_header_t* header, 
-			     packet_footer_t* footer, uint8_t* tx_data){
-  int i;
-  
-#if debug < 99
-  //Only print stats for packets from WBAN in csv mode
-  if( header->type == 0xAB && header->flags == 0x55 ){
-#else  
-  //print everything in debug mode to see AP-AP rssi
-  if( 1 ){
-#endif
-    //Print stats for this recv packet
-    uart_write( "#", 1 );
-    print_rssi( DEVICE_ADDRESS, &header->source, &footer->rssi, buffer[6+2] );
-    //Send Recived RSSI values from WBAN out OTA in next TX packet
-    pack_recv_rssi_in_tx( header, footer, tx_data, buffer );
-    
-    //If next packet id is seen, clear all stale RSSIs
-    if( buffer[6+2] != packet_id_rx ){
-      packet_id_rx = buffer[6+2];
-      init_rssi_array();
-      //signal_yellow();
-    }
-  }
-
-  //Process any recv packets
-  //check for correct packet
-  if( header->type == 0xAA && header->flags == 0x55 ){
-    //More generalized code where each pkt can have >1 rssi
-    for( i = 6; 		//first group of data starts at buffer[6]
-	i < (buffer[5] + 6);	//Buffer[5] = num data bytes in pkt
-	i+=3)			//3 bytes per data group
-    {
-      //if ( header->source != DEVICE_ADDRESS ){
-	print_rssi( header->source, 	//device which sent pkt
-		    &buffer[i], 	//orig pkt src as seen by remote device
-		    &buffer[i+1],	//rssi of pkt seen by remote device
-		    buffer[i+2] );	//packet_id of packet seen by remote
-	
-	//If next packet id is seen, clear all stale RSSIs
-	if( buffer[i+2] != packet_id_rx ){
-	  packet_id_rx = buffer[i+2];
-	  init_rssi_array();
-	  //signal_yellow();
-	}
-	  packet_rssi[ header->source ] = buffer[i+1];
-      //}
-    }
-  }
-
-  return 0;
-}
-#endif
 
 
 void pack_recv_rssi_in_tx( packet_header_t* header, packet_footer_t* footer,
@@ -153,170 +98,23 @@ void pack_recv_rssi_in_tx( packet_header_t* header, packet_footer_t* footer,
   //Need semaphore for tx_buffer_cnt		
   tx_data[2 + tx_buffer_cnt] = header->source;	//pkt sender with following rssi
   tx_data[3 + tx_buffer_cnt] = footer->rssi;	//Recv RSSI
-#if DEVICE_ADDRESS < 0x0A  
   tx_data[4 + tx_buffer_cnt] = buffer[6+2];	//Packet ID, copy from recv
-#endif
   tx_buffer_cnt+=3;				//Increment num bytes used
   tx_data[1] = tx_buffer_cnt;			//Store # bytes used in next pkt
-   
 }
-
-#if DEVICE_ADDRESS < 0xA
-/*******************************************************************************
- * @fn     uint8_t hex_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
- *                                          uint8_t buffer_in_size  )
- * @brief  Used to convert hex values to [hex]string format
- * ****************************************************************************/
-uint8_t hex_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
-                                    uint8_t buffer_in_size  )
-{
-  static const uint8_t hex_char[16] = { '0', '1', '2', '3', '4', '5', '6', '7', 
-                                      '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
-  uint8_t counter = 0;
-  
-  while(counter < buffer_in_size*2 )
-  {
-    buffer_out[counter] = hex_char[((buffer_in[(counter>>1)]>>4) & 0xF)];
-    counter++;
-    buffer_out[counter] = hex_char[(buffer_in[(counter>>1)] & 0xF)];
-    counter++;
-  }
-  
-  return counter;
-}
-
-
-/*******************************************************************************
- * @fn     uint8_t rssi_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
- *                                          uint8_t buffer_in_size  )
- * @brief  Used to convert raw rssi values to decimal string format
- * @return Size of string in buffer_out, excluding \0
- * ****************************************************************************/
-uint8_t rssi_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
-                                    uint8_t buffer_in_size  )
-{
-  uint8_t counter = 0;
-  
-  while(counter < buffer_in_size*2 )
-  {
-    int rssi_dbm;
-    int rssi_raw = buffer_in[(counter>>1)] & 0xFF;
-    if( rssi_raw >= 128 ){
-	rssi_raw = ( rssi_raw - 256 );
-    }
-    rssi_dbm = rssi_raw / 2 - RADIO_RSSI_OFFSET_868MHZ;
-    
-    counter += sprintf( &buffer_out[counter], "%d", rssi_dbm );
-  }
-  return counter;
-}
-
-
-/*******************************************************************************
- * @fn     uint8_t int_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
- *                                          uint8_t buffer_in_size  )
- * @brief  Used to convert hex values to [decimal]string format
- * @return Size of string in buffer_out, excluding \0
- * ****************************************************************************/
-uint8_t int_to_string( uint8_t* buffer_out, uint8_t* buffer_in, 
-                                    uint8_t buffer_in_size  )
-{
-  uint8_t cnt = 0;
-  
-  while(cnt < buffer_in_size*2 )
-  {  
-    cnt += sprintf( &buffer_out[cnt], "%d", buffer_in[cnt>>1] & 0xFF );
-  }
-  return cnt;
-}
-
-
-uint8_t print_rssi( uint8_t pkt_reciever, uint8_t* pkt_source, 
-		    uint8_t* pkt_rssi, uint8_t pkt_id ){
-  //Disable printing if high numbered device (no uart available)
-  if ( DEVICE_ADDRESS > 9 ){
-    return 0;
-  }
-  
-  #if DEBUG > 99
-    //Human Readable
-    print_rssi_debug(pkt_reciever, pkt_source, pkt_rssi, pkt_id);
-  #else
-    //CSV Output
-    print_rssi_csv(pkt_reciever, pkt_source, pkt_rssi, pkt_id);
-  #endif  
-  
-  return 1;
-}
-
-
-inline void print_rssi_debug( uint8_t pkt_reciever, uint8_t* pkt_source, 
-		    uint8_t* pkt_rssi, uint8_t pkt_id ){
-  uint8_t* buf = &print_buffer[0];
-  
-  uart_write( "[", 1 );
-  hex_to_string( print_buffer, &pkt_reciever, 1 );
-  uart_write( print_buffer, 2 );
-  uart_write( "] ", 2 );
-   
-  uart_write( "Pkt From: ", 10 );
-  hex_to_string( print_buffer, pkt_source, 1 );
-  uart_write( print_buffer, 2 );
-  
-  uart_write( " PID: ", 6 );
-  hex_to_string( print_buffer, &pkt_id, 1 );
-  uart_write( print_buffer, 2 );
-  
-  uart_write( " RSSI: 0x", 9 );
-  hex_to_string( print_buffer, pkt_rssi, 1 );
-  uart_write( print_buffer, 2 );
- 
-  uart_write( " RSSI: ", 7 );
-  //RSSI of beacon seen by AP
-  buf += rssi_to_string( buf, pkt_rssi, 1 );
-  *buf++ = ' ';
-  *buf++ = 'd';
-  *buf++ = 'B';
-  *buf++ = 'm';
-  *buf++ = '\n';
-  //Flush buffer
-  uart_write( print_buffer, buf - print_buffer );
-}
-
-
-inline void print_rssi_csv( uint8_t pkt_reciever, uint8_t* pkt_source, 
-		    uint8_t* pkt_rssi, uint8_t pkt_id ){
-  uint8_t* buf = &print_buffer[0];
-  
-  //Packet ID
-  buf += hex_to_string( buf, &pkt_id, 1 );
-  *buf++ = ',';
-
-  //AP which recv beacon from wban
-  buf += hex_to_string( buf, &pkt_reciever, 1 );
-  *buf++ = ',';
-  
-  //RSSI of beacon seen by AP
-  buf += rssi_to_string( buf, pkt_rssi, 1 );
-  *buf++ = '\n';
-  
-  //Flush buffer
-  uart_write( print_buffer, buf - print_buffer );
-}
-#endif
 
 
 /*******************************************************************************
  * @fn     uint8_t fake_button_press()
  * @brief  Instead of using buttons, this function is called from a timer isr
  * ****************************************************************************/
-uint8_t fake_button_press()
+uint8_t timer_callback()
 {
-  buttonPressed = 1;
+  //buttonPressed = 1;
   
   //Disable timer until next packet seen
   //clear_ccr(TOTAL_CCRS);
-  signal_yellow();
+  //signal_yellow();
   return 1;
 }
 
@@ -331,37 +129,30 @@ inline void init_rssi_array(){
 
 
 inline void signal_rx(){
-#if DEVICE_ADDRESS < 0x0A
   //AP - Vibe Dev
   led3_toggle();
-#else
-  //WBAN - SimpVibe1
-  led2_toggle();
-#endif  
 }
 
 
 inline void signal_tx(){
-#if DEVICE_ADDRESS < 0x0A
   //AP - Vibe Dev
   led1_toggle();
-#else
-  //WBAN - SimpVibe1
-  led3_toggle();
-#endif
 }
 
 
 inline void signal_yellow(){
-#if DEVICE_ADDRESS < 0x0A
   //AP - Vibe Dev
   led2_toggle();
-#else
-  //WBAN - SimpVibe1
-  led1_toggle();
-#endif  
 }
 
+void wait_loop( int count ){
+  int i,j;
+  for( i=0; i<count ; i++ ){
+    for( j=0; j<1000/2; j++){
+      ;
+    }
+  }
+}
 
 int main( void )
 {
@@ -378,13 +169,9 @@ int main( void )
   // Initialize Tx Buffer
   header->length = PACKET_LEN;
   header->source = DEVICE_ADDRESS;
-#if DEVICE_ADDRESS < 0x0A
+
   header->type = 0xAA;
   header->flags = 0x55;
-#else
-  header->type = 0xAB;
-  header->flags = 0x55;
-#endif
   
   // Fill in dummy values for the buffer
   for( j=0; j < TOTAL_SAMPLES; j++ )
@@ -409,8 +196,8 @@ int main( void )
   setup_timer_a(MODE_UP);
   
   // Send fake button press every ~2 seconds
-  register_timer_callback( fake_button_press, 0 );
-  set_ccr(0, 16400);	// 1/2 second
+  //register_timer_callback( timer_callback, 0 );
+  //set_ccr(0, 16400);	// 1/2 second
   
   // Initialize radio and enable receive callback function
   setup_radio( process_rx );
@@ -420,17 +207,19 @@ int main( void )
   
   //Tx Header
   tx_data[0] = 0x7A;
+  num_tx = 0;
   
   while (1)
   {
     // Enter sleep mode
     //__bis_SR_register( LPM3_bits + GIE );
 
-    if (buttonPressed) // Process a button press->transmit
-    {
-      process_tx( tx_data );
-      
+    if (buttonPressed){ // Process a button press->transmit
       buttonPressed = 0;
+      signal_yellow();
+      wait_loop( DEVICE_ADDRESS * 1200 );	//Wait device id * 100 ms
+      process_tx( tx_data );			//Transmit data
+      num_tx++;
     }
   }
   
