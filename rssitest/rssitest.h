@@ -22,43 +22,18 @@
 #include "radio_ext.h"
 
 #define DEBUG 0
-#define DEVICE_ADDRESS 0x01
+#define DEVICE_ADDRESS 0x00
 
-#define TOTAL_SAMPLES (50)
-//TI supplied offsets at Ta = 25 deg C, Vcc = 3V with EM430F6137RF90
-//CC430F613x, CC430F612x, CC430F513x MSP430 SoC with RF Core (Rev. F) pg86
-#define RADIO_RSSI_OFFSET_868MHZ (74)
-#define RADIO_RSSI_OFFSET_433MHZ (74)
 #define RADIO_NUM_APS (2)
 #define PACKET_ID_MAX (255)
 
 uint8_t tx_buffer[PACKET_LEN+1];
 volatile uint8_t buttonPressed = 1;
-uint8_t print_buffer[200];
 uint8_t tx_buffer_cnt = 0;
 uint8_t packet_id_tx = 0;
 uint8_t packet_id_rx = 0;
 uint8_t packet_group = 0;
 uint8_t packet_rssi[RADIO_NUM_APS];	//Current rx packet's RSSIs
-
-typedef struct
-{
-  uint8_t length;
-  uint8_t source;
-  uint8_t type;
-  uint8_t flags;
-} packet_header_t;
-
-typedef struct
-{
-  uint8_t samples[TOTAL_SAMPLES];
-} packet_data_t;
-
-typedef struct
-{
-  uint8_t rssi;
-  uint8_t lqi_crcok;
-} packet_footer_t;
 
 uint8_t hex_to_string( uint8_t*, uint8_t*, uint8_t );
 uint8_t fake_button_press();
