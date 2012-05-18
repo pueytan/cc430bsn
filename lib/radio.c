@@ -28,14 +28,14 @@ static uint8_t (*rx_callback)( uint8_t*, uint8_t ) = dummy_callback;
  * @brief  Initialize radio at tx power of 0 dBm register Rx Callback function
  * ****************************************************************************/
 void setup_radio( uint8_t (*callback)(uint8_t*, uint8_t) ){
-  setup_radio( uint8_t (*callback)(uint8_t*, uint8_t), PATABLE_VAL_0DBM );
+  setup_radio_pwr( callback, PATABLE_VAL_0DBM );
 }
 
 /*******************************************************************************
  * @fn     void setup_radio( uint8_t (*callback)(void) )
  * @brief  Initialize radio at given tx power and register Rx Callback function
  * ****************************************************************************/
-void setup_radio( uint8_t (*callback)(uint8_t*, uint8_t), uint8_t power_patable )
+void setup_radio_pwr( uint8_t (*callback)(uint8_t*, uint8_t), uint8_t power_patable )
 {
   // Set-up rx_callback function
   rx_callback = callback;

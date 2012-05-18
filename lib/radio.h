@@ -35,6 +35,7 @@
 #define POWER_PACKET (0x05)
 
 void setup_radio( uint8_t (*)(uint8_t*, uint8_t) );
+void setup_radio_pwr( uint8_t (*)(uint8_t*, uint8_t), uint8_t power_patable );
 void radio_tx( uint8_t*, uint8_t );
 
 
