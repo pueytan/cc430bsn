@@ -90,7 +90,7 @@ int main( void )
   set_ccr(0, 32800);	// 1 second
   
   // Init radio at +10dBm; enable receive callback
-  setup_radio( process_rx );
+  setup_radio_pwr( process_rx, PATABLE_VAL_10DBM );
   
   eint();
 
