@@ -26,28 +26,21 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
   static uint8_t* tx_data = ( (packet_data_t*)(tx_buffer + sizeof(packet_header_t)) )->samples;
   static int i;
 
-  if( header->type == 0xAB && header->flags == 0x55 ){
+  //Beacons from WBAN
+  if( header->type == 0xAB && header->flags == 0x55 ){  
+    //Beacon reset - pid got is 0 and last_pid > pid
+    if( packet_id_rx > buffer[6+2] && buffer[6+2] == 0 ){
+	packet_group++;
+    }
+    packet_id_rx = buffer[6+2];
+
     //Send Recived RSSI values from WBAN out OTA in next TX packet
     pack_recv_rssi_in_tx( header, footer, tx_data, buffer );
-    
-    //If next packet id is seen, clear all stale RSSIs
-    if( buffer[6+2] != packet_id_rx ){
-      if( buffer[6+2] < packet_id_rx )
-	packet_group++;
-
-      packet_id_rx = buffer[6+2];
-      //init_rssi_array();
-      timerCalls++;
-      //signal_yellow();
-    }
-    
-    //Print stats for this packet from WBAN
-    //uart_write( "#", 1 );
+    timerCalls++;	//Relay data to other APs
     print_rssi( DEVICE_ADDRESS, &header->source, &footer->rssi, buffer[6+2], packet_group);
   }
 
-  //Process any recv packets
-  //check for correct packet
+  //Process packets from other APs
   if( header->type == 0xAA && header->flags == 0x55 ){
     //TODO:Print AP-AP RSSI once a while
     
@@ -57,23 +50,19 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
 	i < (buffer[5] + 6);	//Buffer[5] = num data bytes in pkt
 	i+=3)			//3 bytes per data group
     {
-	//If next packet id is seen, clear all stale RSSIs
-	if( buffer[i+2] != packet_id_rx ){
-	  if( buffer[6+2] < packet_id_rx )
-	    packet_group++;
-	  
-	  packet_id_rx = buffer[i+2];
-	  //init_rssi_array();
-	  timerCalls++;
-	  //signal_yellow();
-	}
-	packet_rssi[ header->source ] = buffer[i+1];
+      //Beacon reset but pkt to this AP lost
+      if( packet_id_rx > buffer[i+2] && buffer[i+2] == 0 ){
+	  packet_group++;
+      }
       
-	print_rssi( header->source, 	//device which sent pkt
-		    &buffer[i], 	//orig pkt src as seen by remote device
-		    &buffer[i+1],	//rssi of pkt seen by remote device
-		    buffer[i+2], 	//packet_id of packet seen by remote
-		    packet_group);	//header to distinguish waves of pids
+      if( packet_id_rx < buffer[i+2] )
+	packet_id_rx = buffer[6+2];
+
+      print_rssi( header->source, 	//device which sent pkt
+		  &buffer[i], 	//orig pkt src as seen by remote device
+		  &buffer[i+1],	//rssi of pkt seen by remote device
+		  buffer[i+2], 	//packet_id of packet seen by remote
+		  packet_group);	//header to distinguish waves of pids
     }
   }
     
