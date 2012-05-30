@@ -27,7 +27,7 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
   static int i;
 
   //Beacons from WBAN
-  if( header->type == 0xAB && header->flags == 0x55 ){  
+  if( header->type == 0xAB && header->flags == 0x55 ){
     //Beacon reset - pid got is 0 and last_pid > pid
     if( packet_id_rx > buffer[6+2] && buffer[6+2] == 0 ){
 	packet_group++;
@@ -66,8 +66,10 @@ uint8_t process_rx( uint8_t* buffer, uint8_t size )
     }
   }
     
+  print_rx_debug(buffer, size, header, footer);
+    
   //Pulse Red LED during recieve
-  signal_rx();
+  signal_rx();  
   return 1;
 }
 
@@ -165,13 +167,6 @@ int main( void )
 
   // Initialize LEDs
   setup_leds();
-  
-  // Initialize timer
-  setup_timer_a(MODE_UP);
-  
-  // Send fake button press every ~2 seconds
-  //register_timer_callback( timer_callback, 0 );
-  //set_ccr(0, 16400);	// 1/2 second
   
   // Initialize radio and enable receive callback function
   setup_radio_pwr( process_rx, PATABLE_VAL_10DBM );

@@ -24,7 +24,7 @@
 #define DEBUG 0
 #define DEVICE_ADDRESS 0x01
 
-#define RADIO_NUM_APS (2)
+#define RADIO_NUM_APS (4)
 #define PACKET_ID_MAX (255)
 
 uint8_t tx_buffer[PACKET_LEN+1];

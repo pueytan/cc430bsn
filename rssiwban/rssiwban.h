@@ -6,8 +6,6 @@
 * @author Alvaro Prieto
 */
 
-#include "common.h"
-#include "intrinsics.h"
 #include "leds.h"
 #include "timers.h"
 #include <signal.h>
@@ -17,7 +15,6 @@
 #define DEVICE_ADDRESS 0xA
 
 #define TOTAL_SAMPLES (50)
-#define RADIO_NUM_APS (2)
 #define PACKET_ID_MAX (255)
 
 uint8_t tx_buffer[PACKET_LEN+1];
