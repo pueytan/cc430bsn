@@ -146,7 +146,7 @@ inline void print_rssi_csv( uint8_t pkt_reciever, uint8_t* pkt_source,
 
 
 void print_rx_debug(uint8_t* buffer, uint8_t size, packet_header_t* header, 
-			     packet_footer_t* footer, uint8_t* tx_data){
+			     packet_footer_t* footer){
   // Print incoming packet information for debugging
   uart_write( "Size: ", 6 );
   hex_to_string( print_buffer, &header->length, 1 );

@@ -74,6 +74,6 @@ inline void print_rssi_csv( uint8_t pkt_reciever, uint8_t* pkt_source,
  * @return Size of string in buffer_out, excluding \0
  * ****************************************************************************/
 void print_rx_debug(uint8_t* buffer, uint8_t size, packet_header_t* header, 
-			     packet_footer_t* footer, uint8_t* tx_data);
+			     packet_footer_t* footer);
 
 #endif /* _RADIO_EXT_H */
